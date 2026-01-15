@@ -1,0 +1,6 @@
+@GenDemo_HostAddress = http://localhost:5156
+
+GET {{GenDemo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
