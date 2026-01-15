@@ -1,0 +1,92 @@
+name: Release Docs & Changelog
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-release-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --verbosity normal
+
+      - name: Install Swagger CLI
+        run: dotnet tool install --global Swashbuckle.AspNetCore.Cli
+
+      - name: Generate swagger.json
+        run: |
+          dotnet swagger tofile --output artifacts/swagger.json ./GenDemo.dll v1
+        env:
+          PATH: $PATH:/home/runner/.dotnet/tools
+
+      - name: Generate release-notes.md from commits
+        id: release_notes
+        run: |
+          mkdir -p artifacts
+          git fetch --tags
+          LAST_TAG=$(git describe --tags --abbrev=0 || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="$LAST_TAG..HEAD"
+          fi
+          git log $RANGE --pretty=format:'%s' > artifacts/commits.txt
+          echo "# Release Notes" > artifacts/release-notes.md
+          echo >> artifacts/release-notes.md
+          echo "## Added" >> artifacts/release-notes.md
+          grep -iE '^feat(\(|!|:| )' artifacts/commits.txt | sed 's/^/- /' >> artifacts/release-notes.md
+          echo >> artifacts/release-notes.md
+          echo "## Changed" >> artifacts/release-notes.md
+          grep -iE '^chore|^refactor|^perf|^style' artifacts/commits.txt | sed 's/^/- /' >> artifacts/release-notes.md
+          echo >> artifacts/release-notes.md
+          echo "## Fixed" >> artifacts/release-notes.md
+          grep -iE '^fix' artifacts/commits.txt | sed 's/^/- /' >> artifacts/release-notes.md
+          echo >> artifacts/release-notes.md
+          echo "## Breaking Changes" >> artifacts/release-notes.md
+          grep -iE 'BREAKING CHANGE|!:' artifacts/commits.txt | sed 's/^/- /' >> artifacts/release-notes.md
+
+      - name: Insert release notes into CHANGELOG.md ([Unreleased])
+        id: changelog
+        run: |
+          RELEASE_NOTES=$(awk '/^# Release Notes/{flag=1;next}/^$/{flag=0}flag' artifacts/release-notes.md)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            cp CHANGELOG.md artifacts/CHANGELOG.md
+            awk '/^## \[Unreleased\]/{print;print RELEASE_NOTES;next}1' RELEASE_NOTES="$RELEASE_NOTES" CHANGELOG.md > artifacts/CHANGELOG.md
+          else
+            awk '/^## \[Unreleased\]/{print;print RELEASE_NOTES;next}1' RELEASE_NOTES="$RELEASE_NOTES" CHANGELOG.md > tmp && mv tmp CHANGELOG.md
+          fi
+
+      - name: Commit and push changelog (main push only)
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: update CHANGELOG.md with latest release notes [skip ci]" || echo "No changes to commit"
+          git push
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            artifacts/swagger.json
+            artifacts/release-notes.md
+            artifacts/CHANGELOG.md
