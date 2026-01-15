@@ -28,15 +28,14 @@ jobs:
         run: dotnet test --no-build --verbosity normal
 
       - name: Install Swagger CLI
-        run: dotnet tool install --global Swashbuckle.AspNetCore.Cli
-
-      - name: Add dotnet tools to PATH
-        run: echo "${HOME}/.dotnet/tools" >> $GITHUB_PATH
+        run: |
+          dotnet tool install --global Swashbuckle.AspNetCore.Cli
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       - name: Generate swagger.json
         run: |
           mkdir -p artifacts
-          dotnet swagger tofile --output artifacts/swagger.json ./GenDemo/bin/Release/net8.0/GenDemo.dll v1
+          $HOME/.dotnet/tools/dotnet-swagger tofile --output artifacts/swagger.json ./GenDemo/bin/Release/net8.0/GenDemo.dll v1
 
       - name: Generate release-notes.md from commits
         id: release_notes
