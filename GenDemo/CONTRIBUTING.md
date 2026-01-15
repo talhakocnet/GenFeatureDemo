@@ -1,6 +1,9 @@
+
 # Contributing
 
-Bu projeye katkı sağlamak için lütfen aşağıdaki `Conventional Commits` kurallarını takip edin. Bu kurallar sürüm notlarının (release notes) otomatik üretilmesine yardımcı olur ve sürüm yükseltme kararlarını netleştirir.
+Bu projeye katkı sağlamak için lütfen aşağıdaki `Conventional Commits` kurallarını takip edin. Sürüm notları ve değişiklikler için CHANGELOG.md dosyası GenDemo klasöründe (`./GenDemo/CHANGELOG.md`) tutulur ve otomasyon bu dosyayı günceller.
+
+> Not: Otomatik güncellemeler ve release pipeline işlemleri için CHANGELOG.md dosyasının yolu `./GenDemo/CHANGELOG.md` olarak ayarlanmıştır.
 
 ## Commit formatı (kısa)
 

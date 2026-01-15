@@ -60,10 +60,10 @@ jobs:
         run: |
           RELEASE_NOTES=$(awk '/^# Release Notes/{flag=1;next}/^$/{flag=0}flag' artifacts/release-notes.md)
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            cp CHANGELOG.md artifacts/CHANGELOG.md
-            awk '/^## \[Unreleased\]/{print;print RELEASE_NOTES;next}1' RELEASE_NOTES="$RELEASE_NOTES" CHANGELOG.md > artifacts/CHANGELOG.md
+            cp ./GenDemo/CHANGELOG.md artifacts/CHANGELOG.md
+            awk '/^## \[Unreleased\]/{print;print RELEASE_NOTES;next}1' RELEASE_NOTES="$RELEASE_NOTES" ./GenDemo/CHANGELOG.md > artifacts/CHANGELOG.md
           else
-            awk '/^## \[Unreleased\]/{print;print RELEASE_NOTES;next}1' RELEASE_NOTES="$RELEASE_NOTES" CHANGELOG.md > tmp && mv tmp CHANGELOG.md
+            awk '/^## \[Unreleased\]/{print;print RELEASE_NOTES;next}1' RELEASE_NOTES="$RELEASE_NOTES" ./GenDemo/CHANGELOG.md > tmp && mv tmp ./GenDemo/CHANGELOG.md
           fi
 
       - name: Commit and push changelog (main push only)
@@ -71,7 +71,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
+          git add ./GenDemo/CHANGELOG.md
           git commit -m "chore: update CHANGELOG.md with latest release notes [skip ci]" || echo "No changes to commit"
           git push
 
@@ -82,3 +82,4 @@ jobs:
           path: |
             artifacts/release-notes.md
             artifacts/CHANGELOG.md
+            ./GenDemo/CHANGELOG.md
