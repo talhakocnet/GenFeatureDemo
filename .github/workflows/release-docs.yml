@@ -3,12 +3,19 @@ name: Release Docs & Changelog
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   build-release-docs:
@@ -35,6 +42,49 @@ jobs:
       - name: Test
         run: dotnet test --no-build --verbosity normal
 
+      - name: Generate OpenAPI (swagger) files
+        shell: bash
+        run: |
+          mkdir -p docs/api
+
+          dotnet tool install --global Swashbuckle.AspNetCore.Cli --version 6.5.0
+          export PATH="$PATH:$HOME/.dotnet/tools"
+
+          dotnet swagger tofile \
+            --output docs/api/openapi.json \
+            ./GenDemo/bin/Release/net10.0/GenDemo.dll \
+            v1
+
+          cat > docs/api/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>GenDemo API Docs</title>
+            <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+            <style>
+              body { margin: 0; }
+            </style>
+          </head>
+          <body>
+            <div id="swagger-ui"></div>
+            <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+            <script>
+              window.onload = () => {
+                SwaggerUIBundle({
+                  url: "./openapi.json",
+                  dom_id: "#swagger-ui",
+                  deepLinking: true,
+                  presets: [SwaggerUIBundle.presets.apis],
+                  layout: "BaseLayout"
+                });
+              };
+            </script>
+          </body>
+          </html>
+          HTML
+
 
 
       - name: Generate release-notes.md from commits
@@ -58,10 +108,18 @@ jobs:
           : > artifacts/changed.md
           : > artifacts/fixed.md
           : > artifacts/breaking.md
-          grep -iE '^feat(\(|!|:| )' artifacts/commits.txt | sed 's/^/- /' >> artifacts/added.md || true
-          grep -iE '^(chore|refactor|perf|style)(\(|!|:| )' artifacts/commits.txt | sed 's/^/- /' >> artifacts/changed.md || true
-          grep -iE '^fix(\(|!|:| )' artifacts/commits.txt | sed 's/^/- /' >> artifacts/fixed.md || true
-          grep -iE 'BREAKING CHANGE|!:' artifacts/commits.txt | sed 's/^/- /' >> artifacts/breaking.md || true
+          # Turn commit subjects into readable bullets (strip prefixes, normalize punctuation)
+          prettify() {
+            sed -E "s/^(feat|fix|docs|chore|refactor|perf|style)(\([^)]*\))?(!)?:[[:space:]]*//I" | \
+              sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | \
+              sed -E '/[.!?]$/! s/$/./' | \
+              sed -E 's/^./\u&/'
+          }
+
+          grep -iE '^feat(\(|!|:| )' artifacts/commits.txt | prettify | sed 's/^/- /' >> artifacts/added.md || true
+          grep -iE '^(chore|refactor|perf|style|docs)(\(|!|:| )' artifacts/commits.txt | prettify | sed 's/^/- /' >> artifacts/changed.md || true
+          grep -iE '^fix(\(|!|:| )' artifacts/commits.txt | prettify | sed 's/^/- /' >> artifacts/fixed.md || true
+          grep -iE 'BREAKING CHANGE|!:' artifacts/commits.txt | prettify | sed 's/^/- /' >> artifacts/breaking.md || true
 
           # Human-readable artifact
           echo "# Release Notes" > artifacts/release-notes.md
@@ -224,7 +282,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ./GenDemo/CHANGELOG.md
+          git add ./GenDemo/CHANGELOG.md docs/api/openapi.json docs/api/index.html
           git commit -m "chore: update CHANGELOG.md with latest release notes [skip ci]" || echo "No changes to commit"
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           git push origin HEAD:main
@@ -242,3 +300,26 @@ jobs:
             artifacts/breaking.md
             artifacts/CHANGELOG.md
             ./GenDemo/CHANGELOG.md
+            docs/api/openapi.json
+            docs/api/index.html
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy-pages:
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    needs: build-release-docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

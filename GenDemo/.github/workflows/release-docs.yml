@@ -1,10 +1,10 @@
-name: Release Docs & Changelog
+name: UNUSED - Root workflow only
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+# NOTE:
+# GitHub Actions only runs workflows under the repository root: .github/workflows/
+# This file is kept to avoid confusion/history, but it is intentionally disabled.
+
+on: []
 
 jobs:
   build-release-docs:
