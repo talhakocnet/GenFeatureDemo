@@ -50,7 +50,7 @@ jobs:
           dotnet tool install --global Swashbuckle.AspNetCore.Cli --version 6.5.0
           export PATH="$PATH:$HOME/.dotnet/tools"
 
-          dotnet swagger tofile \
+          swagger tofile \
             --output docs/api/openapi.json \
             ./GenDemo/bin/Release/net10.0/GenDemo.dll \
             v1

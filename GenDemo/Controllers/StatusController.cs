@@ -17,7 +17,8 @@ namespace GenDemo.Controllers
                 version = "1.0.0",
                 timestamp = DateTime.UtcNow.ToString("o"),
                 environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown",
-                uptimeSeconds = (int)(DateTime.UtcNow - _startTime).TotalSeconds
+                uptimeSeconds = (int)(DateTime.UtcNow - _startTime).TotalSeconds,
+                dummyValue = "lorem ipsum"
             };
             return Ok(result);
         }
