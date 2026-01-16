@@ -12,15 +12,19 @@ on:
 
 jobs:
   build-release-docs:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Restore dependencies
         run: dotnet restore
@@ -37,37 +41,180 @@ jobs:
         id: release_notes
         run: |
           mkdir -p artifacts
-          git fetch --tags
-          LAST_TAG=$(git describe --tags --abbrev=0 || echo "")
+          git fetch --tags --force
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
           if [ -z "$LAST_TAG" ]; then
-            RANGE="main"
+            git log --no-merges --pretty=format:'%s' \
+              --invert-grep --grep='chore: update CHANGELOG.md with latest release notes' \
+              > artifacts/commits.txt
           else
-            RANGE="$LAST_TAG..main"
+            git log --no-merges --pretty=format:'%s' "$LAST_TAG..HEAD" \
+              --invert-grep --grep='chore: update CHANGELOG.md with latest release notes' \
+              > artifacts/commits.txt
           fi
-          git log $RANGE --pretty=format:'%s' > artifacts/commits.txt
+
+          # Per-section bullet lists for inserting into CHANGELOG.md
+          : > artifacts/added.md
+          : > artifacts/changed.md
+          : > artifacts/fixed.md
+          : > artifacts/breaking.md
+          grep -iE '^feat(\(|!|:| )' artifacts/commits.txt | sed 's/^/- /' >> artifacts/added.md || true
+          grep -iE '^(chore|refactor|perf|style)(\(|!|:| )' artifacts/commits.txt | sed 's/^/- /' >> artifacts/changed.md || true
+          grep -iE '^fix(\(|!|:| )' artifacts/commits.txt | sed 's/^/- /' >> artifacts/fixed.md || true
+          grep -iE 'BREAKING CHANGE|!:' artifacts/commits.txt | sed 's/^/- /' >> artifacts/breaking.md || true
+
+          # Human-readable artifact
           echo "# Release Notes" > artifacts/release-notes.md
           echo >> artifacts/release-notes.md
           echo "## Added" >> artifacts/release-notes.md
-          grep -iE '^feat(\(|!|:| )' artifacts/commits.txt | sed 's/^/- /' >> artifacts/release-notes.md
+          cat artifacts/added.md >> artifacts/release-notes.md
           echo >> artifacts/release-notes.md
           echo "## Changed" >> artifacts/release-notes.md
-          grep -iE '^chore|^refactor|^perf|^style' artifacts/commits.txt | sed 's/^/- /' >> artifacts/release-notes.md
+          cat artifacts/changed.md >> artifacts/release-notes.md
           echo >> artifacts/release-notes.md
           echo "## Fixed" >> artifacts/release-notes.md
-          grep -iE '^fix' artifacts/commits.txt | sed 's/^/- /' >> artifacts/release-notes.md
+          cat artifacts/fixed.md >> artifacts/release-notes.md
           echo >> artifacts/release-notes.md
           echo "## Breaking Changes" >> artifacts/release-notes.md
-          grep -iE 'BREAKING CHANGE|!:' artifacts/commits.txt | sed 's/^/- /' >> artifacts/release-notes.md
+          cat artifacts/breaking.md >> artifacts/release-notes.md
 
       - name: Insert release notes into CHANGELOG.md ([Unreleased])
         id: changelog
         run: |
-          RELEASE_NOTES=$(awk '/^# Release Notes/{flag=1;next}/^$/{flag=0}flag' artifacts/release-notes.md)
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             cp ./GenDemo/CHANGELOG.md artifacts/CHANGELOG.md
-            awk '/^## \[Unreleased\]/{print;print RELEASE_NOTES;next}1' RELEASE_NOTES="$RELEASE_NOTES" ./GenDemo/CHANGELOG.md > artifacts/CHANGELOG.md
+          python3 - <<'PY'
+          from pathlib import Path
+
+          changelog_path = Path('artifacts/CHANGELOG.md')
+          text = changelog_path.read_text(encoding='utf-8')
+
+          def read_lines(path: str):
+            p = Path(path)
+            if not p.exists():
+              return []
+            return [ln.rstrip('\n') for ln in p.read_text(encoding='utf-8').splitlines() if ln.strip()]
+
+          sections_to_add = {
+            '### Added': read_lines('artifacts/added.md'),
+            '### Changed': read_lines('artifacts/changed.md'),
+            '### Fixed': read_lines('artifacts/fixed.md'),
+            '### Breaking Changes': read_lines('artifacts/breaking.md'),
+          }
+
+          lines = text.splitlines()
+          # Find [Unreleased] block
+          try:
+            start = next(i for i,l in enumerate(lines) if l.strip() == '## [Unreleased]')
+          except StopIteration:
+            raise SystemExit('Missing "## [Unreleased]" header in CHANGELOG.md')
+          end = next((i for i in range(start+1, len(lines)) if lines[i].startswith('## [')), len(lines))
+
+          unreleased = lines[start:end]
+          before = lines[:start]
+          after = lines[end:]
+
+          def inject(unreleased_lines, heading, new_bullets):
+            if not new_bullets:
+              return unreleased_lines
+            out = []
+            in_target = False
+            existing = set()
+            for ln in unreleased_lines:
+              if ln.strip() == heading:
+                in_target = True
+                out.append(ln)
+                continue
+              if in_target:
+                if ln.startswith('### '):
+                  # heading ended; insert before next heading
+                  for b in new_bullets:
+                    if b not in existing:
+                      out.append(b)
+                  in_target = False
+                  out.append(ln)
+                  continue
+                if ln.startswith('- '):
+                  existing.add(ln)
+              out.append(ln)
+            if in_target:
+              # end of unreleased reached
+              for b in new_bullets:
+                if b not in existing:
+                  out.append(b)
+            return out
+
+          for heading, bullets in sections_to_add.items():
+            unreleased = inject(unreleased, heading, bullets)
+
+          new_text = '\n'.join(before + unreleased + after) + '\n'
+          changelog_path.write_text(new_text, encoding='utf-8')
+          PY
           else
-            awk '/^## \[Unreleased\]/{print;print RELEASE_NOTES;next}1' RELEASE_NOTES="$RELEASE_NOTES" ./GenDemo/CHANGELOG.md > tmp && mv tmp ./GenDemo/CHANGELOG.md
+          python3 - <<'PY'
+          from pathlib import Path
+
+          changelog_path = Path('./GenDemo/CHANGELOG.md')
+          text = changelog_path.read_text(encoding='utf-8')
+
+          def read_lines(path: str):
+            p = Path(path)
+            if not p.exists():
+              return []
+            return [ln.rstrip('\n') for ln in p.read_text(encoding='utf-8').splitlines() if ln.strip()]
+
+          sections_to_add = {
+            '### Added': read_lines('artifacts/added.md'),
+            '### Changed': read_lines('artifacts/changed.md'),
+            '### Fixed': read_lines('artifacts/fixed.md'),
+            '### Breaking Changes': read_lines('artifacts/breaking.md'),
+          }
+
+          lines = text.splitlines()
+          try:
+            start = next(i for i,l in enumerate(lines) if l.strip() == '## [Unreleased]')
+          except StopIteration:
+            raise SystemExit('Missing "## [Unreleased]" header in CHANGELOG.md')
+          end = next((i for i in range(start+1, len(lines)) if lines[i].startswith('## [')), len(lines))
+
+          unreleased = lines[start:end]
+          before = lines[:start]
+          after = lines[end:]
+
+          def inject(unreleased_lines, heading, new_bullets):
+            if not new_bullets:
+              return unreleased_lines
+            out = []
+            in_target = False
+            existing = set()
+            for ln in unreleased_lines:
+              if ln.strip() == heading:
+                in_target = True
+                out.append(ln)
+                continue
+              if in_target:
+                if ln.startswith('### '):
+                  for b in new_bullets:
+                    if b not in existing:
+                      out.append(b)
+                  in_target = False
+                  out.append(ln)
+                  continue
+                if ln.startswith('- '):
+                  existing.add(ln)
+              out.append(ln)
+            if in_target:
+              for b in new_bullets:
+                if b not in existing:
+                  out.append(b)
+            return out
+
+          for heading, bullets in sections_to_add.items():
+            unreleased = inject(unreleased, heading, bullets)
+
+          new_text = '\n'.join(before + unreleased + after) + '\n'
+          changelog_path.write_text(new_text, encoding='utf-8')
+          PY
           fi
 
       - name: Commit and push changelog (main push only)
@@ -88,5 +235,10 @@ jobs:
           name: release-artifacts
           path: |
             artifacts/release-notes.md
+            artifacts/commits.txt
+            artifacts/added.md
+            artifacts/changed.md
+            artifacts/fixed.md
+            artifacts/breaking.md
             artifacts/CHANGELOG.md
             ./GenDemo/CHANGELOG.md
