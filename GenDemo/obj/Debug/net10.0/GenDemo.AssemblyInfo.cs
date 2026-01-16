@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("GenDemo")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+311b0e560eb6f76b9b65d20b9a281468f3bd34d5")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+29e978595a4d18a110964b8d0b4a4a5dd9789568")]
 [assembly: System.Reflection.AssemblyProductAttribute("GenDemo")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GenDemo")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

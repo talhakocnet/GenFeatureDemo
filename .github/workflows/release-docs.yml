@@ -56,7 +56,7 @@ jobs:
           APP_PID=$!
 
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:5005/swagger/v1/swagger.json -o docs/api/openapi.json; then
+            if curl -fsS http://127.0.0.1:5005/openapi/v1.json -o docs/api/openapi.json; then
               break
             fi
             sleep 1
