@@ -13,7 +13,8 @@ namespace GenDemo.Controllers
             var result = new {
                 status = "ok",
                 version = "1.0.0",
-                timestamp = DateTime.UtcNow.ToString("o")
+                timestamp = DateTime.UtcNow.ToString("o"),
+                environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
             };
             return Ok(result);
         }
