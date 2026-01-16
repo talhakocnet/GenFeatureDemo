@@ -5,6 +5,7 @@ Bu proje, [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) formatını t
 
 ## [Unreleased]
 
+
 ### Added
 - `/api/status` endpoint'i eklendi. Basit durum ve versiyon bilgisi döndürür.
 
