@@ -10,7 +10,11 @@ namespace GenDemo.Controllers
         [HttpGet]
         public IActionResult GetStatus()
         {
-            var result = new { status = "ok", version = "1.0.0" };
+            var result = new {
+                status = "ok",
+                version = "1.0.0",
+                timestamp = DateTime.UtcNow.ToString("o")
+            };
             return Ok(result);
         }
     }
