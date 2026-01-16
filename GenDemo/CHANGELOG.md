@@ -13,6 +13,7 @@ Bu proje, [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) formatını t
 - feat: apiye environment eklendi.
 - feat:new md files
 - feat: add status endpoint
+- feat: uptimesecond add
 ### Changed
 
 - refactor: github/workflows
